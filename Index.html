@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Viagem Espacial - Esfera Negra</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            overflow: hidden;
+            background: #000;
+            font-family: 'Arial', sans-serif;
+            height: 100vh;
+            touch-action: none;
+        }
+        
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 10, 0.9);
+            z-index: 200;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .screen h1 {
+            font-size: 3rem;
+            color: #88eeff;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px rgba(0, 136, 255, 0.6);
+        }
+
+        .screen p {
+            font-size: 1.2rem;
+            color: #aaa;
+            margin-bottom: 30px;
+            max-width: 500px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #0088ff, #0044aa);
+            color: white;
+            border: 2px solid #88eeff;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 0 15px rgba(0, 136, 255, 0.4);
+            user-select: none;
+        }
+
+        .btn:hover {
+            background: linear-gradient(135deg, #00aaff, #0066cc);
+            transform: scale(1.05);
+            box-shadow: 0 0 25px rgba(0, 170, 255, 0.8);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+        
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            z-index: 100;
+            padding: 10px;
+            pointer-events: none;
+        }
+        
+        .control-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(100, 200, 255, 0.7);
+            color: white;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+            pointer-events: auto;
+            transition: all 0.2s;
+        }
+        
+        .control-btn:active {
+            background: rgba(100, 200, 255, 0.3);
+            transform: scale(0.95);
+        }
+        
+        .movement-controls {
+            display: grid;
+            grid-template-columns: repeat(3, 60px);
+            grid-template-rows: repeat(3, 60px);
+            gap: 10px;
+        }
+        
+        .info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #88eeff;
+            font-size: 14px;
+            background: rgba(0, 20, 40, 0.8);
+            padding: 12px;
+            border-radius: 8px;
+            z-index: 50;
+            border: 1px solid #0088ff;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div id="main-menu" class="screen">
+        <h1>ESFERA NEGRA</h1>
+        <p>Explore a galáxia infinita, colete cristais, desvie de meteoros e enfrente naves inimigas em combate!</p>
+        <button class="btn" id="start-btn">INICIAR MISSÃO</button>
+    </div>
+
+    <div id="game-over-screen" class="screen hidden">
+        <h1>FIM DE JOGO</h1>
+        <p id="final-score">Sua nave foi destruída!</p>
+        <button class="btn" id="restart-btn">TENTAR NOVAMENTE</button>
+    </div>
+    
+    <canvas id="spaceCanvas"></canvas>
+    
+    <div class="info" id="info">Carregando...</div>
+    
+    <div class="controls">
+        <div class="movement-controls">
+            <div></div>
+            <button class="control-btn" id="forward">↑</button>
+            <div></div>
+            <button class="control-btn" id="left">←</button>
+            <button class="control-btn" id="center">○</button>
+            <button class="control-btn" id="right">→</button>
+            <div></div>
+            <button class="control-btn" id="backward">↓</button>
+            <div></div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('spaceCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        let gameState = 'MENU'; 
+        let score = 0;
+        let shields = 100;
+        
+        const worldSize = 2000;
+        const stars = [];
+        const planets = [];
+        const crystals = [];
+        const meteors = [];
+        const enemyShips = [];
+        const enemyLasers = [];
+        
+        let camera = {
+            x: 0,
+            y: 0,
+            z: 0,
+            speed: 3,
+            movement: { forward: false, backward: false, left: false, right: false }
+        };
+
+        const blackHole = {
+            baseRadius: 110,
+            rotation: 0
+        };
+        
+        function initUniverse() {
+            stars.length = 0;
+            planets.length = 0;
+            crystals.length = 0;
+            meteors.length = 0;
+            enemyShips.length = 0;
+            enemyLasers.length = 0;
+            
+            for (let i = 0; i < 600; i++) {
+                stars.push({
+                    x: (Math.random() - 0.5) * worldSize,
+                    y: (Math.random() - 0.5) * worldSize,
+                    z: Math.random() * worldSize,
+                    size: Math.random() * 2 + 1,
+                    color: `hsl(${180 + Math.random() * 60}, 100%, 80%)`
+                });
+            }
+
+            for (let i = 0; i < 5; i++) {
+                planets.push({
+                    x: (Math.random() - 0.5) * worldSize,
+                    y: (Math.random() - 0.5) * worldSize,
+                    z: Math.random() * worldSize + 500,
+                    radius: 70 + Math.random() * 50,
+                    color: ['#ff4444', '#4488ff', '#ffaa00', '#aa44ff', '#00ffaa'][i]
+                });
+            }
+
+            for (let i = 0; i < 25; i++) {
+                crystals.push({
+                    x: (Math.random() - 0.5) * worldSize,
+                    y: (Math.random() - 0.5) * worldSize,
+                    z: Math.random() * worldSize
+                });
+            }
+
+            for (let i = 0; i < 10; i++) {
+                meteors.push({
+                    x: (Math.random() - 0.5) * worldSize,
+                    y: (Math.random() - 0.5) * worldSize,
+                    z: Math.random() * worldSize,
+                    size: 20 + Math.random() * 15
+                });
+            }
+
+            for (let i = 0; i < 6; i++) {
+                enemyShips.push({
+                    x: (Math.random() - 0.5) * worldSize,
+                    y: (Math.random() - 0.5) * worldSize,
+                    z: Math.random() * worldSize,
+                    vx: (Math.random() - 0.5) * 2,
+                    vy: (Math.random() - 0.5) * 2,
+                    shootTimer: Math.random() * 100
+                });
+            }
+
+            camera.x = 0;
+            camera.y = 0;
+            camera.z = 0;
+            score = 0;
+            shields = 100;
+        }
+        
+        const controlButtons = ['forward', 'backward', 'left', 'right', 'center'];
+        controlButtons.forEach(buttonId => {
+            const button = document.getElementById(buttonId);
+            if (button) {
+                ['touchstart', 'mousedown'].forEach(evt => {
+                    button.addEventListener(evt, (e) => { e.preventDefault(); handleControl(buttonId, true); });
+                });
+                ['touchend', 'mouseup'].forEach(evt => {
+                    button.addEventListener(evt, (e) => { e.preventDefault(); handleControl(buttonId, false); });
+                });
+            }
+        });
+        
+        function handleControl(buttonId, isPressed) {
+            switch(buttonId) {
+                case 'forward': camera.movement.forward = isPressed; break;
+                case 'backward': camera.movement.backward = isPressed; break;
+                case 'left': camera.movement.left = isPressed; break;
+                case 'right': camera.movement.right = isPressed; break;
+                case 'center':
+                    if (isPressed) { camera.x = 0; camera.y = 0; camera.z = 0; }
+                    break;
+            }
+        }
+        
+        document.getElementById('start-btn').addEventListener('click', () => {
+            document.getElementById('main-menu').classList.add('hidden');
+            initUniverse();
+            gameState = 'PLAYING';
+        });
+
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            document.getElementById('game-over-screen').classList.add('hidden');
+            initUniverse();
+            gameState = 'PLAYING';
+        });
+
+        function getWrappedCoord(objCoord, camCoord) {
+            let diff = objCoord - camCoord;
+            const half = worldSize / 2;
+            while (diff < -half) diff += worldSize;
+            while (diff > half) diff -= worldSize;
+            return diff;
+        }
+
+        function drawBlackHole() {
+            // Fixando a Esfera Negra perfeitamente no centro absoluto da janela do jogo
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const radius = blackHole.baseRadius;
+
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.rotate(blackHole.rotation);
+            
+            const gradient = ctx.createRadialGradient(0, 0, radius, 0, 0, radius * 2.2);
+            gradient.addColorStop(0, 'rgba(0, 0, 0, 1)');
+            gradient.addColorStop(0.5, 'rgba(140, 0, 200, 0.85)');
+            gradient.addColorStop(1, 'rgba(0, 140, 255, 0)');
+            
+            ctx.beginPath();
+            ctx.arc(0, 0, radius * 2.2, 0, Math.PI * 2);
+            ctx.fillStyle = gradient;
+            ctx.fill();
+            
+            const holeGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+            holeGradient.addColorStop(0, 'rgba(10, 10, 10, 1)');
+            holeGradient.addColorStop(1, 'rgba(0, 0, 0, 1)');
+            
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            ctx.fillStyle = holeGradient;
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.arc(0, 0, radius * 1.15, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(150, 230, 255, 0.9)';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+            
+            ctx.restore();
+            blackHole.rotation += 0.02;
+        }
+        
+        function drawUniverse() {
+            stars.forEach(star => {
+                let relX = getWrappedCoord(star.x, camera.x);
+                let relY = getWrappedCoord(star.y, camera.y);
+                let relZ = getWrappedCoord(star.z, camera.z);
+                if (relZ < 10) relZ += worldSize;
+
+                const scale = 400 / relZ;
+                const screenX = canvas.width / 2 + relX * scale;
+                const screenY = canvas.height / 2 + relY * scale;
+
+                if (screenX >= 0 && screenX <= canvas.width && screenY >= 0 && screenY <= canvas.height) {
+                    ctx.beginPath();
+                    ctx.arc(screenX, screenY, star.size * scale, 0, Math.PI * 2);
+                    ctx.fillStyle = star.color;
+                    ctx.fill();
+                }
+            });
+
+            planets.forEach(planet => {
+                let relX = getWrappedCoord(planet.x, camera.x);
+                let relY = getWrappedCoord(planet.y, camera.y);
+                let relZ = getWrappedCoord(planet.z, camera.z);
+                if (relZ < 10) relZ += worldSize;
+
+                const scale = 400 / relZ;
+                const screenX = canvas.width / 2 + relX * scale;
+                const screenY = canvas.height / 2 + relY * scale;
+                const r = planet.radius * scale;
+
+                if (screenX >= -150 && screenX <= canvas.width + 150 && screenY >= -150 && screenY <= canvas.height + 150) {
+                    ctx.beginPath();
+                    ctx.arc(screenX, screenY, r, 0, Math.PI * 2);
+                    ctx.fillStyle = planet.color;
+                    ctx.shadowBlur = 20;
+                    ctx.shadowColor = planet.color;
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                }
+            });
+
+            crystals.forEach(crystal => {
+                let relX = getWrappedCoord(crystal.x, camera.x);
+                let relY = getWrappedCoord(crystal.y, camera.y);
+                let relZ = getWrappedCoord(crystal.z, camera.z);
+                if (relZ < 10) relZ += worldSize;
+
+                const scale = 400 / relZ;
+                const screenX = canvas.width / 2 + relX * scale;
+                const screenY = canvas.height / 2 + relY * scale;
+
+                if (relZ > 0 && relZ < 1500) {
+                    ctx.beginPath();
+                    ctx.arc(screenX, screenY, 8 * scale, 0, Math.PI * 2);
+                    ctx.fillStyle = '#00ffcc';
+                    ctx.shadowBlur = 12;
+                    ctx.shadowColor = '#00ffcc';
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+
+                    const dist = Math.hypot(screenX - canvas.width/2, screenY - canvas.height/2);
+                    if (dist < 35 && relZ < 150) {
+                        score += 100;
+                        crystal.x = camera.x + (Math.random() - 0.5) * 1000;
+                        crystal.y = camera.y + (Math.random() - 0.5) * 1000;
+                        crystal.z = camera.z + 1000;
+                    }
+                }
+            });
+
+            meteors.forEach(meteor => {
+                let relX = getWrappedCoord(meteor.x, camera.x);
+                let relY = getWrappedCoord(meteor.y, camera.y);
+                let relZ = getWrappedCoord(meteor.z, camera.z);
+                if (relZ < 10) relZ += worldSize;
+
+                const scale = 400 / relZ;
+                const screenX = canvas.width / 2 + relX * scale;
+                const screenY = canvas.height / 2 + relY * scale;
+
+                if (relZ > 0 && relZ < 1500) {
+                    ctx.beginPath();
+                    ctx.arc(screenX, screenY, meteor.size * scale, 0, Math.PI * 2);
+                    ctx.fillStyle = '#887766';
+                    ctx.strokeStyle = '#554433';
+                    ctx.lineWidth = 2;
+                    ctx.fill();
+                    ctx.stroke();
+
+                    const dist = Math.hypot(screenX - canvas.width/2, screenY - canvas.height/2);
+                    if (dist < (meteor.size * scale + 15) && relZ < 150) {
+                        shields -= 25;
+                        meteor.x = camera.x + (Math.random() - 0.5) * 1000;
+                        meteor.y = camera.y + (Math.random() - 0.5) * 1000;
+                        meteor.z = camera.z + 1000;
+                        if (shields <= 0) triggerGameOver("Sua nave foi destruída por um meteoro!");
+                    }
+                }
+            });
+
+            enemyShips.forEach(enemy => {
+                enemy.x += enemy.vx;
+                enemy.y += enemy.vy;
+                enemy.z -= camera.speed * 0.8;
+
+                if (enemy.z <= 0) {
+                    enemy.z = 1200;
+                    enemy.x = camera.x + (Math.random() - 0.5) * 1000;
+                    enemy.y = camera.y + (Math.random() - 0.5) * 1000;
+                }
+
+                enemy.shootTimer++;
+                if (enemy.shootTimer > 80) {
+                    enemy.shootTimer = 0;
+                    enemyLasers.push({
+                        x: enemy.x,
+                        y: enemy.y,
+                        z: enemy.z,
+                        vx: (camera.x - enemy.x) * 0.02,
+                        vy: (camera.y - enemy.y) * 0.02,
+                        vz: -15
+                    });
+                }
+
+                let relX = getWrappedCoord(enemy.x, camera.x);
+                let relY = getWrappedCoord(enemy.y, camera.y);
+                let relZ = getWrappedCoord(enemy.z, camera.z);
+                if (relZ < 10) relZ += worldSize;
+
+                const scale = 400 / relZ;
+                const screenX = canvas.width / 2 + relX * scale;
+                const screenY = canvas.height / 2 + relY * scale;
+
+                if (relZ > 0 && relZ < 1500) {
+                    ctx.save();
+                    ctx.translate(screenX, screenY);
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(0, -12 * scale);
+                    ctx.lineTo(15 * scale, 10 * scale);
+                    ctx.lineTo(0, 4 * scale);
+                    ctx.lineTo(-15 * scale, 10 * scale);
+                    ctx.closePath();
+                    ctx.fillStyle = '#ff2222';
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 1.5;
+                    ctx.fill();
+                    ctx.stroke();
+
+                    ctx.restore();
+
+                    const dist = Math.hypot(screenX - canvas.width/2, screenY - canvas.height/2);
+                    if (dist < 30 && relZ < 150) {
+                        shields -= 40;
+                        enemy.z = 1200;
+                        enemy.x = camera.x + (Math.random() - 0.5) * 1000;
+                        enemy.y = camera.y + (Math.random() - 0.5) * 1000;
+                        if (shields <= 0) triggerGameOver("Sua nave colidiu com um caça inimigo!");
+                    }
+                }
+            });
+
+            for (let i = enemyLasers.length - 1; i >= 0; i--) {
+                let laser = enemyLasers[i];
+                laser.z += laser.vz;
+
+                let relX = getWrappedCoord(laser.x, camera.x);
+                let relY = getWrappedCoord(laser.y, camera.y);
+                let relZ = getWrappedCoord(laser.z, camera.z);
+
+                const scale = 400 / (relZ > 0 ? relZ : 1);
+                const screenX = canvas.width / 2 + relX * scale;
+                const screenY = canvas.height / 2 + relY * scale;
+
+                if (relZ > 0 && relZ < 1000) {
+                    ctx.beginPath();
+                    ctx.arc(screenX, screenY, 4 * scale, 0, Math.PI * 2);
+                    ctx.fillStyle = '#ff0055';
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = '#ff0055';
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+
+                    const dist = Math.hypot(screenX - canvas.width/2, screenY - canvas.height/2);
+                    if (dist < 25 && relZ < 100) {
+                        shields -= 15;
+                        enemyLasers.splice(i, 1);
+                        if (shields <= 0) triggerGameOver("Sua nave foi abatida por tiros laser inimigos!");
+                        continue;
+                    }
+                }
+
+                if (relZ < 0 || relZ > 2000) {
+                    enemyLasers.splice(i, 1);
+                }
+            }
+        }
+        
+        function updateCamera() {
+            const moveSpeed = 6;
+            if (camera.movement.forward) camera.z += moveSpeed;
+            if (camera.movement.backward) camera.z -= moveSpeed;
+            if (camera.movement.left) camera.x -= moveSpeed;
+            if (camera.movement.right) camera.x += moveSpeed;
+
+            const halfWorld = worldSize / 2;
+            if (camera.x > halfWorld) camera.x -= worldSize;
+            if (camera.x < -halfWorld) camera.x += worldSize;
+            if (camera.y > halfWorld) camera.y -= worldSize;
+            if (camera.y < -halfWorld) camera.y += worldSize;
+            if (camera.z > halfWorld) camera.z -= worldSize;
+            if (camera.z < -halfWorld) camera.z += worldSize;
+        }
+
+        function triggerGameOver(reason) {
+            gameState = 'GAMEOVER';
+            document.getElementById('final-score').innerText = `${reason}\nPontuação final: ${score} pontos.`;
+            document.getElementById('game-over-screen').classList.remove('hidden');
+        }
+        
+        function updateInfo() {
+            document.getElementById('info').innerHTML = `
+                🚀 Combate Galáctico<br>
+                🛡️ Escudo: ${shields}%<br>
+                💎 Cristais: ${score}<br>
+                Vel: ${camera.speed}
+            `;
+        }
+        
+        function animate() {
+            ctx.fillStyle = 'rgba(0, 0, 20, 0.3)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            if (gameState === 'PLAYING') {
+                updateCamera();
+                updateInfo();
+                drawUniverse();
+                drawBlackHole();
+            }
+            
+            requestAnimationFrame(animate);
+        }
+        
+        animate();
+    </script>
+</body>
+</html>
